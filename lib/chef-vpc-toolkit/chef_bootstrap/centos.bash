@@ -3,21 +3,13 @@ function install_chef {
 local INSTALL_TYPE=${1:-"CLIENT"} # CLIENT/SERVER
 
 # cached RPMs from ELFF
-local CDN_BASE="http://c2521002.cdn.cloudfiles.rackspacecloud.com"
+local CDN_BASE="http://c1849332.r32.cf0.rackcdn.com"
+local CHEF_VERSION="0.9.8"
+local CHEF_TYPE=$(echo $INSTALL_TYPE | tr [:upper:] [:lower:])
+local RH_RELEASE=$(awk '{print $3}' < /etc/redhat-release)
+local ARCH=$(uname -p)
 
-local RH_RELEASE=$(cat /etc/redhat-release)
-local TARBALL="chef-client-0.9.8-centos5.4-x86_64.tar.gz"
-
-if [ "$RH_RELEASE" == "CentOS release 5.5 (Final)" ]; then
-	TARBALL="chef-client-0.9.8-centos5.5-x86_64.tar.gz"
-	if [[ "$INSTALL_TYPE" == "SERVER" ]]; then
-		TARBALL="chef-server-0.9.8-centos5.5-x86_64.tar.gz"
-	fi
-else
-	if [[ "$INSTALL_TYPE" == "SERVER" ]]; then
-		TARBALL="chef-server-0.9.8-centos5.4-x86_64.tar.gz"
-	fi
-fi
+TARBALL="chef-${CHEF_TYPE}-${CHEF_VERSION}-centos${RH_RELEASE}-${ARCH}.tar.gz"
 
 rpm -q rsync &> /dev/null || yum install -y -q rsync
 rpm -q wget &> /dev/null || yum install -y -q wget
