@@ -5,11 +5,11 @@
 
 Gem::Specification.new do |s|
   s.name = %q{chef-vpc-toolkit}
-  s.version = "2.8.3"
+  s.version = "2.9.0"
 
   s.required_rubygems_version = Gem::Requirement.new(">= 0") if s.respond_to? :required_rubygems_version=
   s.authors = ["Dan Prince"]
-  s.date = %q{2012-01-15}
+  s.date = %q{2012-05-09}
   s.default_executable = %q{chef-vpc-toolkit}
   s.description = %q{The Chef VPC Toolkit is a set of Rake tasks that provide a framework to help automate the creation and configuration of cloud server groups for development or testing. Requires Cloud Servers VPC.}
   s.email = %q{dan.prince@rackspace.com}

@@ -13,12 +13,7 @@ namespace :group do
 	desc "Create a new group of cloud servers"
 	task :create => [ "init", "chef:validate_json" ] do
 
-		json_config_file=ENV['SERVER_GROUP_JSON']
-		if json_config_file.nil? then
-			json_config_file = ServerGroup::CONFIG_FILE
-		end
-
-		sg=ServerGroup.from_json_config(IO.read(json_config_file))
+		sg=ServerGroup.from_json_config(IO.read(ServerGroup::CONFIG_FILE))
 		sg=ServerGroup.create(sg)
 		puts "Server group ID #{sg.id} created."
 		
@@ -182,19 +177,20 @@ namespace :chef do
 		group=ServerGroup.fetch(:source => "cache")
 		configs["ssh_gateway_ip"]=group.vpn_gateway_ip
 
-		json_config_file=ENV['JSON']
-		if not json_config_file.nil? then
-			configs["chef_json_file"] = json_config_file
-		end
-
 		server_name=ENV['SERVER_NAME']
 		if server_name.nil? then
 			client_validation_key=ChefInstaller.install_chef_server(configs, group.os_types)
-			ChefInstaller.create_databags(configs)
 			ChefInstaller.install_chef_clients(configs, client_validation_key, group.os_types)
+			ChefInstaller.run_chef_clients_once(configs)
+			ChefInstaller.create_databags(configs)
+			ChefInstaller.knife_add_runlists(configs)
+			ChefInstaller.start_chef_clients(configs)
 		else
 			client_validation_key=ChefInstaller.client_validation_key(configs)
 			ChefInstaller.install_chef_client(configs, server_name, client_validation_key, group.os_types[server_name])
+			ChefInstaller.run_chef_client_once(configs, server_name)
+			ChefInstaller.knife_add_runlist(configs, server_name)
+			ChefInstaller.start_chef_client(configs, server_name)
 		end
 
 	end

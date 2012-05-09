@@ -1,3 +1,6 @@
+* Tue May 8 2012 Jon Hartman <jon.hartman@rackspace.com> - 2.9.0
+- Merged in changes to add Chef 0.10.8 functionality
+
 * Wed Feb 22 2012 Jon Hartman <jon.hartman@rackspace.com> - 2.8.3
 - Forked and updated for CentOS 5.6
 

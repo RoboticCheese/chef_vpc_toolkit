@@ -2,12 +2,36 @@
 export CHEF_STATUS_PORT="1234"
 export STATUS_MONITOR_DIR="/root/status_monitor"
 export SERVICE_BIN="/usr/sbin/service"
+export CHEF_CLIENT="/usr/bin/chef-client"
+
 [ -f /bin/rpm ] && SERVICE_BIN="/sbin/service"
 
 function configure_chef_server {
+        if [ -f /tmp/chef_already_installed ]; then
+		echo "Chef server already configured."
+		return 0
+	fi
+	#Chef Solo Configuration
+	if [ ! -d /etc/chef ]; then
+		mkdir -p /etc/chef
+	fi
+	cat > /etc/chef/solo.rb  <<-EOF
+file_cache_path "/tmp/chef-solo"
+cookbook_path "/tmp/chef-solo/cookbooks"
+EOF
 
-	echo ""
-
+	#Chef server attributes
+	cat > /tmp/chef-solo-server.json <<-EOF
+{
+  "chef_server": {
+    "server_url": "http://localhost:4000",
+    "webui_enabled": true,
+    "init_style": "init"
+  },  
+  "run_list": [ "recipe[chef-server::rubygems-install]" ]
+}
+EOF
+	chef-solo -c /etc/chef/solo.rb -j /tmp/chef-solo-server.json -r /tmp/bootstrap.tar.gz 
 }
 
 function print_client_validation_key {
@@ -22,40 +46,39 @@ if (( $# != 3 )); then
 	exit 1
 fi
 
+if [ -f /tmp/chef_already_installed ]; then
+	echo "Chef client on $1 already configured."
+	return 0
+fi
+
 local SERVER_NAME=$1
 local CLIENT_VALIDATION_KEY=$2
 local INTERVAL=${3:-"600"} # default is 10 minutes
 
-if [ ! -f "/etc/chef/validation.pem" ]; then
-	cat > /etc/chef/validation.pem <<-EOF_VALIDATION_PEM
-$CLIENT_VALIDATION_KEY
-	EOF_VALIDATION_PEM
-	sed -e "/^$/d" -i /etc/chef/validation.pem
-fi
-
 local CLIENT_CONFIG="/etc/chef/client.rb"
 local CHEF_NOTIFICATION_HANDLER=/var/lib/chef/handlers/netcat.rb
-sed -e "s|localhost|$SERVER_NAME|g" -i $CLIENT_CONFIG
-sed -e "s|^chef_server_url.*|chef_server_url \"http://$SERVER_NAME:4000\"|g" -i $CLIENT_CONFIG
-sed -e "s|^log_location.*|log_location \"\/var/log/chef/client.log\"|g" -i $CLIENT_CONFIG
-if ! grep "$CHEF_NOTIFICATION_HANDLER" $CLIENT_CONFIG &> /dev/null; then
-cat >> $CLIENT_CONFIG <<-EOF_CAT_CHEF_CLIENT_CONF
-# custom Chef notification handler
-require "$CHEF_NOTIFICATION_HANDLER"
-netcat_handler = NetcatHandler.new
-report_handlers << netcat_handler
-exception_handlers << netcat_handler
-EOF_CAT_CHEF_CLIENT_CONF
-fi
 
-local CHEF_SYSCONFIG=/etc/default/chef-client
-[ -d /etc/sysconfig/ ] && CHEF_SYSCONFIG=/etc/sysconfig/chef-client
-cat > $CHEF_SYSCONFIG <<-EOF_CAT_CHEF_SYSCONFIG
-INTERVAL=$INTERVAL
-SPLAY=20
-CONFIG=/etc/chef/client.rb
-LOGFILE=/var/log/chef/client.log
-EOF_CAT_CHEF_SYSCONFIG
+#Chef Solo Configuration
+mkdir -p /etc/chef
+
+cat > /etc/chef/solo.rb <<-EOF_CHEF_SOLO_RB
+file_cache_path "/tmp/chef-solo"
+cookbook_path "/tmp/chef-solo/cookbooks"
+chef_server_url "http://${SERVER_NAME}:4000"
+EOF_CHEF_SOLO_RB
+
+#Chef client attributes
+cat > /tmp/chef-solo-client.json <<-EOF_CHEF_SOLO_CLIENT_JSON
+{
+  "chef-client": {
+    "init_style": "init",
+    "server_url": "http://${SERVER_NAME}:4000",
+    "validation_client_name": "chef-admin",
+    "interval": ${INTERVAL}
+  },
+  "run_list": [ "recipe[chef-client::config]", "recipe[chef-client]" ]
+}
+EOF_CHEF_SOLO_CLIENT_JSON
 
 mkdir -p /var/lib/chef/handlers
 cat > $CHEF_NOTIFICATION_HANDLER <<-EOF_CHEF_NOTIFY
@@ -78,6 +101,28 @@ class NetcatHandler < Chef::Handler
 end
 EOF_CHEF_NOTIFY
 
+if [ ! -f "/etc/chef/validation.pem" ]; then
+        mkdir -p /etc/chef
+	cat > /etc/chef/validation.pem <<-EOF_VALIDATION_PEM
+$CLIENT_VALIDATION_KEY
+	EOF_VALIDATION_PEM
+	sed -e "/^$/d" -i /etc/chef/validation.pem
+fi
+
+chef-solo -c /etc/chef/solo.rb -j /tmp/chef-solo-client.json -r /tmp/bootstrap.tar.gz 
+
+#TODO: Add this as a template/recipe in chef-client cookbook for chef-solo
+cat >> $CLIENT_CONFIG <<-EOF_CAT_CHEF_CLIENT_CONF
+# custom Chef notification handler
+require "$CHEF_NOTIFICATION_HANDLER"
+netcat_handler = NetcatHandler.new
+report_handlers << netcat_handler
+exception_handlers << netcat_handler
+EOF_CAT_CHEF_CLIENT_CONF
+}
+
+function run_chef_client_once {
+$CHEF_CLIENT --once
 }
 
 # This function will only run on the Chef Server for initial registration
@@ -112,6 +157,21 @@ EOF_CAT_KNIFE_CSH
 chown root:root /etc/profile.d/knife*
 chmod 755 /etc/profile.d/knife*
 
+}
+
+
+function knife_add_to_run_list {
+if (( $# != 2 )); then
+	echo "Unable to add item to runlist with knife."
+	echo "usage: knife_add_to_run_list <node_name> <run_list_item>"
+	exit 1
+fi
+local NODE_NAME=$1
+local RUN_LIST_ITEM=$2 
+
+local DOMAIN_NAME=$(hostname -d)
+
+knife node run_list add $NODE_NAME.$DOMAIN_NAME $RUN_LIST_ITEM
 }
 
 function knife_add_node {
@@ -207,30 +267,16 @@ for CB_REPO in $COOKBOOK_URLS; do
 echo -n "Downloading $CB_REPO..."
 	if [ "http:" == ${CB_REPO:0:5} ] || [ "https:" == ${CB_REPO:0:6} ]; then
 		wget --no-check-certificate "$CB_REPO" -O "/tmp/cookbook-repo.tar.gz" &> /dev/null || { echo "Failed to download cookbook tarball."; return 1; }
-	elif [ "git:" == ${CB_REPO:0:4} ]; then
-		if [ -f /usr/bin/yum ]; then
-			rpm -q git &> /dev/null || yum install -y -q git
-		elif [ -f /usr/bin/dpkg ]; then
-			dpkg -L git > /dev/null 2>&1 || apt-get install -y --quiet git > /dev/null 2>&1
-		else
-			echo "Failed to install git."
-			exit 1
-		fi
-        pushd $REPOS_BASEDIR
-        git clone "$CB_REPO"
-        popd
 	else
 		download_cloud_file "$CB_REPO" "/tmp/cookbook-repo.tar.gz"
 	fi
 echo "OK"
-if [ -f /tmp/cookbook-repo.tar.gz ]; then
-	[ -d "$REPOS_BASEDIR" ] || mkdir -p "$REPOS_BASEDIR"
-	cd $REPOS_BASEDIR
-	echo -n "Extracting $CB_REPO..."
-	tar xzf /tmp/cookbook-repo.tar.gz
-	rm /tmp/cookbook-repo.tar.gz
-	echo "OK"
-fi
+[ -d "$REPOS_BASEDIR" ] || mkdir -p "$REPOS_BASEDIR"
+cd $REPOS_BASEDIR
+echo -n "Extracting $CB_REPO..."
+tar xzf /tmp/cookbook-repo.tar.gz
+rm /tmp/cookbook-repo.tar.gz
+echo "OK"
 done
 
 }
@@ -246,6 +292,21 @@ for CB_REPO in $(ls $REPOS_BASEDIR); do
 REPOS="$REPOS'$REPOS_BASEDIR/$CB_REPO/cookbooks', '$REPOS_BASEDIR/$CB_REPO/site-cookbooks'"
 done
 sed -e "s|^cookbook_path.*|cookbook_path [ $REPOS ]|" -i $HOME/.chef/knife.rb
+echo "Checking if chef server is up"
+local COUNT=0
+pgrep chef-server > /dev/null 2>&1
+until [ $? -eq 0 ]; do
+		echo "waiting for chef-server to come online"
+		sleep 1
+		COUNT=$(( $COUNT + 1 ))
+		if (( $COUNT > 30 )); then
+				echo "timeout waiting for chef-server"
+				exit 1
+				break;
+		fi
+		pgrep chef-server > /dev/null 2>&1
+done
+
 /usr/bin/knife cookbook metadata -a &> /dev/null || { echo "Failed to generate cookbook metadata."; exit 1; }
 /usr/bin/knife cookbook upload -a &> /dev/null || { echo "Failed to install cookbooks."; exit 1; }
 
@@ -268,14 +329,6 @@ function start_chef_server {
 		/sbin/chkconfig couchdb on &> /dev/null
 		$SERVICE_BIN rabbitmq-server start </dev/null &> /dev/null
 		/sbin/chkconfig rabbitmq-server on &> /dev/null
-		sleep 3
-
-		local RABBIT_ERR_SIZE=$(stat -c%s "/var/log/rabbitmq/startup_err")
-		if (( $RABBIT_ERR_SIZE > 0 )); then
-			$SERVICE_BIN rabbitmq-server stop </dev/null &> /dev/null
-			$SERVICE_BIN rabbitmq-server start </dev/null &> /dev/null
-			sleep 3
-		fi
 
 		# Chef 0.9: chef-solr chef-solr-indexer chef-server chef-server-webui
 		# Chef 0.10: chef-solr chef-expander chef-server chef-server-webui
@@ -283,7 +336,6 @@ function start_chef_server {
             if [ -f /etc/init.d/$svc ]; then
 				$SERVICE_BIN $svc start
 				/sbin/chkconfig $svc on &> /dev/null
-				sleep 3
 			fi
 		done
 	fi

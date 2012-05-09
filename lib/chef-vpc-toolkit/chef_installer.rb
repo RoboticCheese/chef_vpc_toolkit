@@ -77,12 +77,12 @@ if json.has_key?(options["chef_server_name"]) then
 	configure_client_script="configure_chef_client '#{options['chef_server_name']}' '' '#{options['chef_interval']}'"
 	start_client_script="start_chef_client"
 end
-knife_add_nodes_script=""
+knife_add_empty_nodes_script=""
 json.each_pair do |node_name, node_json|
-	run_list=node_json['run_list'].inspect
+	run_list_json=JSON.generate([])
 	node_json.delete("run_list")
-	attributes=node_json.to_json.to_s
-	knife_add_nodes_script+="knife_add_node '#{node_name}' '#{run_list}' '#{attributes}'\n"
+	attributes_json=node_json.to_json.to_s
+	knife_add_empty_nodes_script+="knife_add_node '#{node_name}' '#{run_list_json}' '#{attributes_json}'\n"
 end
 
 cookbook_urls=self.get_cookbook_repos(options)
@@ -91,7 +91,7 @@ os_type=machine_os_types[options['chef_server_name']]
 data=%x{
 ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
 ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
-echo "Installing Chef server on: $HOSTNAME"
+echo "Installing Chef server and client on: $HOSTNAME"
 EOF_BASH
 EOF_GATEWAY
 }
@@ -102,28 +102,119 @@ ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF
 ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
 #{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
 #{install_chef_script('SERVER', os_type)}
-#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+EOF_BASH
+EOF_GATEWAY
+}
 
-mkdir -p /root/cookbook-repos
+puts data
 
-configure_chef_server
-start_chef_server
-start_notification_server
-
-#{configure_client_script}
-
-configure_knife "#{options["knife_editor"]}"
-
-knife_upload_cookbooks_and_roles
-
-#{knife_add_nodes_script}
-
-#{start_client_script}
-
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+echo "Done installing Chef server on: $HOSTNAME"
+echo "Configuring Chef server on: $HOSTNAME"
 EOF_BASH
 EOF_GATEWAY
 }
 puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+mkdir -p /root/cookbook-repos
+configure_chef_server
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+echo "Done configuring Chef server on: $HOSTNAME"
+echo "Configuring Chef client on: $HOSTNAME"
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+#{configure_client_script}
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+echo "Done configuring Chef client on: $HOSTNAME"
+echo "Configuring knife on: $HOSTNAME"
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+configure_knife "#{options["knife_editor"]}"
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+echo "Done configuring knife on: $HOSTNAME"
+echo "Uploading cookbooks and roles to Chef server on: $HOSTNAME"
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+knife_upload_cookbooks_and_roles
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+echo "Done uploading cookbooks and roles to Chef server on: $HOSTNAME"
+echo "Adding nodes to Chef server on: $HOSTNAME"
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+#{knife_add_empty_nodes_script}
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+
+#start_chef_server
 
 return client_validation_key(options)
 
@@ -172,13 +263,82 @@ def self.install_chef_client(options, client_name, client_validation_key, os_typ
 	#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
 	#{IO.read(CHEF_INSTALL_FUNCTIONS)}
 	#{install_chef_script('CLIENT', os_type)}
-	configure_chef_client '#{options['chef_server_name']}' '#{client_validation_key}' '#{options['chef_interval']}'
-	start_chef_client
 	EOF_BASH
 	EOF_GATEWAY
 	}
 	puts data
 
+	puts "Done installing chef client on: #{client_name}"
+	puts "Configuring chef client on: #{client_name}"
+
+	data=%x{
+	ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+	if ! grep -c "#{client_name}" /etc/hosts &> /dev/null; then
+		echo "Client '#{client_name}' doesn't exist."
+		exit 0
+	fi
+	ssh #{client_name} bash <<-"EOF_BASH"
+	#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+	#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+	configure_chef_client '#{options['chef_server_name']}' '#{client_validation_key}' '#{options['chef_interval']}'
+	EOF_BASH
+	EOF_GATEWAY
+	}
+	puts data
+
+	puts "Done configuring chef client on #{client_name}"
+end
+
+def self.run_chef_clients_once(options)
+json=JSON.parse(IO.read(options['chef_json_file']))
+json.each_pair do |hostname, json_hash|
+    run_chef_client_once(options, hostname)
+end
+
+end
+
+def self.run_chef_client_once(options, client_name)
+puts "Running Chef client once on: #{client_name} to populate ohai attributes"
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+if ! grep -c "#{client_name}" /etc/hosts &> /dev/null; then
+    echo "Client '#{client_name}' doesn't exist."
+    exit 0
+fi
+ssh #{client_name} bash <<-"EOF_BASH"
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+run_chef_client_once
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+puts "Done with initial chef client run on #{client_name}"
+end
+
+def self.start_chef_clients(options)
+json=JSON.parse(IO.read(options['chef_json_file']))
+json.each_pair do |hostname, json_hash|
+    start_chef_client(options, hostname)
+end
+end
+
+def self.start_chef_client(options, client_name)
+puts "Starting Chef client on: #{client_name}"
+data=%x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+if ! grep -c "#{client_name}" /etc/hosts &> /dev/null; then
+    echo "Client '#{client_name}' doesn't exist."
+    exit 0
+fi
+ssh #{client_name} bash <<-"EOF_BASH"
+#{IO.read(File.dirname(__FILE__) + "/cloud_files.bash")}
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+start_chef_client
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
 end
 
 def self.create_databags(options)
@@ -224,11 +384,37 @@ puts "OK."
 
 end
 
+def self.knife_add_runlists(options)
+json=JSON.parse(IO.read(options["chef_json_file"]))
+json.each_pair do |node_name, node_json|
+	knife_add_runlist(options, node_name)
+end
+end
+
+def self.knife_add_runlist(options, client_name)
+knife_add_to_runlist_script=""
+json=JSON.parse(IO.read(options["chef_json_file"]))
+node_json=json[client_name]
+run_list=node_json['run_list']
+run_list.each do |item|
+knife_add_to_runlist_script+="knife_add_to_run_list #{client_name} #{item}\n"
+end
+data = %x{
+ssh -o "StrictHostKeyChecking no" root@#{options['ssh_gateway_ip']} bash <<-"EOF_GATEWAY"
+ssh #{options['chef_server_name']} bash <<-"EOF_BASH"
+#{IO.read(CHEF_INSTALL_FUNCTIONS)}
+#{knife_add_to_runlist_script}
+EOF_BASH
+EOF_GATEWAY
+}
+puts data
+end
+
 def self.knife_readd_node(options, client_name)
 
 Util.raise_if_nil_or_empty(options, "ssh_gateway_ip")
 Util.raise_if_nil_or_empty(options, "chef_json_file")
-
+puts "Readding #{client_name} node with attributes and run list"
 json=JSON.parse(IO.read(options["chef_json_file"]))
 node_json=json[client_name]
 run_list=node_json['run_list'].inspect
