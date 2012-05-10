@@ -36,7 +36,7 @@ cd /tmp/chef-client*
 yum install --nogpgcheck -q -y \
 	ruby-${RUBY_VERSION}-5.x86_64.rpm \
 	ruby-devel-${RUBY_VERSION}-5.x86_64.rpm \
-	ruby-irb-1.8.7.352-5.x86_64.rpm \
+	ruby-irb-${RUBY_VERSION}-5.x86_64.rpm \
 	ruby-ri-${RUBY_VERSION}-5.x86_64.rpm \
 	ruby-rdoc-${RUBY_VERSION}-5.x86_64.rpm \
 	ruby-libs-${RUBY_VERSION}-5.x86_64.rpm \

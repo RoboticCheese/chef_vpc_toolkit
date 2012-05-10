@@ -379,10 +379,6 @@ function start_chef_client {
 function restart_chef_client {
 
 	$SERVICE_BIN chef-client restart
-    if [ -f /sbin/chkconfig ]; then
-		chkconfig chef-client on &> /dev/null
-	fi
-
 }
 
 
