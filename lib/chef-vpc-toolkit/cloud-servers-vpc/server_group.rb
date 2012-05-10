@@ -48,7 +48,7 @@ class ServerGroup
 		@servers=[]
 		@clients=[]
 		@ssh_public_keys=[]
-    end
+	end
 
 	def server(name)
 		@servers.select {|s| s.name == name}[0] if @servers.size > 0
@@ -62,9 +62,9 @@ class ServerGroup
 		@clients.select {|s| s.name == name}[0] if @clients.size > 0
 	end
 
-    def clients
-        @clients
-    end
+	def clients
+		@clients
+	end
 
 	def vpn_gateway_name
 		@servers.select {|s| s.openvpn_server? }[0].name if @servers.size > 0
@@ -134,9 +134,9 @@ class ServerGroup
 						xml_server.description(server.description)
 						xml_server.tag! "flavor-id", server.flavor_id
 						xml_server.tag! "image-id", server.image_id
-                        if server.admin_password then
-						    xml_server.tag! "admin-password", server.admin_password
-                        end
+						if server.admin_password then
+							xml_server.tag! "admin-password", server.admin_password
+						end
 						xml_server.tag! "cloud-server-id-number", server.cloud_server_id_number if server.cloud_server_id_number
 						xml_server.tag! "status", server.status if server.status
 						xml_server.tag! "external-ip-addr", server.external_ip_addr if server.external_ip_addr
@@ -176,8 +176,8 @@ class ServerGroup
 	def self.from_xml(xml)
 
 		sg=nil
-        dom = REXML::Document.new(xml)
-        REXML::XPath.each(dom, "/server-group") do |sg_xml|
+		dom = REXML::Document.new(xml)
+		REXML::XPath.each(dom, "/server-group") do |sg_xml|
 			sg=ServerGroup.new(
 				:name => XMLUtil.element_text(sg_xml, "name"),
 				:id => XMLUtil.element_text(sg_xml, "id").to_i,
@@ -264,17 +264,17 @@ class ServerGroup
 
 	def cache_to_disk
 		FileUtils.mkdir_p(@@data_dir)
-        File.open(File.join(@@data_dir, "#{@id}.xml"), 'w') do |f|
-            f.chmod(0600)
-            f.write(self.to_xml)
-        end
+		File.open(File.join(@@data_dir, "#{@id}.xml"), 'w') do |f|
+			f.chmod(0600)
+			f.write(self.to_xml)
+		end
 	end
 
 	def delete
 
-        Connection.delete("/server_groups/#{@id}.xml")
-        out_file=File.join(@@data_dir, "#{@id}.xml")
-        File.delete(out_file) if File.exists?(out_file)
+		Connection.delete("/server_groups/#{@id}.xml")
+		out_file=File.join(@@data_dir, "#{@id}.xml")
+		File.delete(out_file) if File.exists?(out_file)
 
 	end
 
@@ -286,7 +286,7 @@ class ServerGroup
 		timeout=options[:timeout] or timeout = ENV['TIMEOUT']
 		if timeout.nil? or timeout.empty? then
 			timeout=1500 # defaults to 25 minutes
-		end	
+		end
 
 		online = false
 		count=0
@@ -346,7 +346,7 @@ class ServerGroup
 		elsif source == "cache" then
 			out_file=File.join(@@data_dir, "#{id}.xml")
 			raise "No server group files exist." if not File.exists?(out_file)
-            ServerGroup.from_xml(IO.read(out_file))
+			ServerGroup.from_xml(IO.read(out_file))
 		else
 			raise "Invalid fetch :source specified."
 		end
@@ -375,10 +375,10 @@ class ServerGroup
 	end
 
 	def self.most_recent
-        server_groups=[]
-        Dir[File.join(@@data_dir, "*.xml")].each do  |file|
-            server_groups << ServerGroup.from_xml(IO.read(file))
-        end
+		server_groups=[]
+		Dir[File.join(@@data_dir, "*.xml")].each do  |file|
+			server_groups << ServerGroup.from_xml(IO.read(file))
+		end
 		if server_groups.size > 0 then
 			server_groups.sort { |a,b| b.id <=> a.id }[0]
 		else
