@@ -364,6 +364,7 @@ ssh #{client_name} bash <<-"EOF_BASH"
 else
 	"start_chef_client"
 end}
+set_chkconfig chef-client on
 EOF_BASH
 EOF_GATEWAY
 }

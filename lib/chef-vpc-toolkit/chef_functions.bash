@@ -370,9 +370,6 @@ function start_chef_server {
 function start_chef_client {
 
 	$SERVICE_BIN chef-client start
-    if [ -f /sbin/chkconfig ]; then
-		chkconfig chef-client on &> /dev/null
-	fi
 
 }
 
@@ -381,6 +378,20 @@ function restart_chef_client {
 	$SERVICE_BIN chef-client restart
 }
 
+function set_chkconfig {
+
+	if (( $# != 3 )); then
+		echo "usage: set_chkconfig <service_name> <on|off|reset>"
+		exit 1
+	fi
+
+	local SERVICE_NAME=$1
+	local STATE=$2
+
+	if [ -f /sbin/chkconfig ]; then
+		chkconfig $SERVICE_NAME $STATE &> /dev/null
+	fi
+}
 
 function start_notification_server {
 
