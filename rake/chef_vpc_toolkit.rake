@@ -190,11 +190,20 @@ namespace :chef do
 		server_name=ENV['SERVER_NAME']
 		if server_name.nil? then
 			client_validation_key=ChefInstaller.install_chef_server(configs, group.os_types)
+			threads=ChefInstaller.install_chef_clients(configs, client_validation_key, group.os_types)
+			threads.each_index do |idx|
+				threads[idx].join
+			end
+			ChefInstaller.run_chef_clients_once(configs)
 			ChefInstaller.create_databags(configs)
-			ChefInstaller.install_chef_clients(configs, client_validation_key, group.os_types)
+			ChefInstaller.knife_add_runlists(configs)
+			ChefInstaller.start_chef_clients(configs, true)
 		else
 			client_validation_key=ChefInstaller.client_validation_key(configs)
 			ChefInstaller.install_chef_client(configs, server_name, client_validation_key, group.os_types[server_name])
+			ChefInstaller.run_chef_client_once(configs, server_name)
+			ChefInstaller.knife_add_runlist(configs, server_name)
+			ChefInstaller.start_chef_client(configs, server_name)
 		end
 
 	end

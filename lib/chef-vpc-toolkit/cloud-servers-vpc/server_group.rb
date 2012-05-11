@@ -280,13 +280,13 @@ class ServerGroup
 
 	# Poll the server group until it is online.
 	# :timeout - max number of seconds to wait before raising an exception.
-	#			Defaults to 1500
+	#            Defaults to 1500
 	def poll_until_online(options={})
 
 		timeout=options[:timeout] or timeout = ENV['TIMEOUT']
 		if timeout.nil? or timeout.empty? then
 			timeout=1500 # defaults to 25 minutes
-		end	
+		end
 
 		online = false
 		count=0
