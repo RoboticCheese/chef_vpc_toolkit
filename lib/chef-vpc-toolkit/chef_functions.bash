@@ -380,7 +380,7 @@ function restart_chef_client {
 
 function set_chkconfig {
 
-	if (( $# != 3 )); then
+	if (( $# != 2 )); then
 		echo "usage: set_chkconfig <service_name> <on|off|reset>"
 		exit 1
 	fi
