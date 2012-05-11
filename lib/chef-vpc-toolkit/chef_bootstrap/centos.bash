@@ -1,7 +1,7 @@
 function install_chef {
 
 #Check whether chef is already installed
-rpm -qa | grep chef
+rpm -qa | grep "^rubygems-chef"
 if [ $? == 0 ]; then
 	touch /tmp/chef_already_installed
 	echo "Chef already installed, exiting"
